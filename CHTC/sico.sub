@@ -1,0 +1,34 @@
+DOCKER_NAME = nsartore/sicopolis-chtc
+DOCKER_TAG = v0.2
+SICOPOLIS_FILE = sicopolis.zip 
+MAX_RUN_TIME = 6h
+CORE_NB = 1
+ANF_PATH_INIT = sico_in/grl
+ 
+container_image = docker://$(DOCKER_NAME):$(DOCKER_TAG)
+universe = container
+executable = exec.sh
+arguments = $(SIMULATION_NAME) $(Cluster)_$(Process) $(SICOPOLIS_FILE) $(MAX_RUN_TIME) $(CORE_NB) $(ANF_PATH_INIT)
+
+transfer_input_files = file:///staging/nsartore/$(SICOPOLIS_FILE) 
+transfer_output_files = output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz
+transfer_output_remaps = "output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz = file:///staging/nsartore/output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz"
+Requirements = (Target.HasCHTCStaging == true)
+
+checkpoint_exit_code        = 85
+transfer_checkpoint_files   = snapshot
++is_resumable = true
+should_transfer_files       = yes
+when_to_transfer_output     = ON_EXIT
+
+log = output_$(Cluster)_$(Process)_$(SIMULATION_NAME).log
+error = output_$(Cluster)_$(Process)_$(SIMULATION_NAME).err
+output = output_$(Cluster)_$(Process)_$(SIMULATION_NAME).out
+
+request_cpus = $(CORE_NB)
+request_memory = 1GB
+request_disk = 10GB
+
+queue SIMULATION_NAME from expList_Full16_red
+#SIMULATION_NAME = grl04_bm5_spinup02_holo_cFDCC0_1005_150_1_1_cHH0_000
+#queue 1

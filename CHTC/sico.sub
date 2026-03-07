@@ -1,12 +1,13 @@
-DOCKER_NAME = nsartore/sicopolis-chtc
-DOCKER_TAG = v0.2
+USERNAME = nsartore
 SICOPOLIS_FILE = sicopolis.zip 
 MAX_RUN_TIME = 6h
+ANF_PATH_INIT = 
 CORE_NB = 1
-ANF_PATH_INIT = sico_in/grl
 RAM = 1GB
 DISK = 10GB
-USERNAME = nsartore
+
+DOCKER_NAME = nsartore/sicopolis-chtc
+DOCKER_TAG = latest
  
 container_image = docker://$(DOCKER_NAME):$(DOCKER_TAG)
 universe = container

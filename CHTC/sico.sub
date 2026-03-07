@@ -4,15 +4,18 @@ SICOPOLIS_FILE = sicopolis.zip
 MAX_RUN_TIME = 6h
 CORE_NB = 1
 ANF_PATH_INIT = sico_in/grl
+RAM = 1GB
+DISK = 10GB
+USERNAME = nsartore
  
 container_image = docker://$(DOCKER_NAME):$(DOCKER_TAG)
 universe = container
 executable = exec.sh
 arguments = $(SIMULATION_NAME) $(Cluster)_$(Process) $(SICOPOLIS_FILE) $(MAX_RUN_TIME) $(CORE_NB) $(ANF_PATH_INIT)
 
-transfer_input_files = file:///staging/nsartore/$(SICOPOLIS_FILE) 
+transfer_input_files = file:///staging/$(USERNAME)/$(SICOPOLIS_FILE) 
 transfer_output_files = output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz
-transfer_output_remaps = "output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz = file:///staging/nsartore/output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz"
+transfer_output_remaps = "output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz = file:///staging/$(USERNAME)/output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz"
 Requirements = (Target.HasCHTCStaging == true)
 
 checkpoint_exit_code        = 85
@@ -26,9 +29,12 @@ error = output_$(Cluster)_$(Process)_$(SIMULATION_NAME).err
 output = output_$(Cluster)_$(Process)_$(SIMULATION_NAME).out
 
 request_cpus = $(CORE_NB)
-request_memory = 1GB
-request_disk = 10GB
+request_memory = $(RAM)
+request_disk = $(DISK)
 
-queue SIMULATION_NAME from expList_Full16_red
-#SIMULATION_NAME = grl04_bm5_spinup02_holo_cFDCC0_1005_150_1_1_cHH0_000
+# To run multiple simulations uncomment the line below and replace <SIMULATION_LIST_FILE>
+queue SIMULATION_NAME from <SIMULATION_LIST_FILE>
+
+# To run a single simulation uncomment the two lines below and replace <SIMULATION_NAME>
+#SIMULATION_NAME = <SIMULATION_NAME>
 #queue 1

@@ -23,7 +23,6 @@ Contains only the runtime environment and dependencies required to run SICOPOLIS
 - Fortran compiler (gfortran)
 - NetCDF libraries (libnetcdf-dev, netcdf-bin, libnetcdff-dev)
 - LIS library (v2.1.8) for solving linear systems
-- Compression tools (tar, pigz)
 
 **Usage**: Designed for CHTC where SICOPOLIS code is transferred separately as `sicopolis.zip` or uncompressed.
 
@@ -32,7 +31,6 @@ Includes the full SICOPOLIS environment with code automatically cloned from GitH
 - All dependencies from Environment image
 - SICOPOLIS code cloned from official repository
 - Input files downloaded via `get_input_files.sh`
-- Pre-configured paths for NetCDF and LIS
 
 **Usage**: Ideal for local testing and development.
 
@@ -64,28 +62,22 @@ Configures job submission with the following key features:
 
 **Container Configuration**:
 ```
-container_image = docker://nsartore/sicopolis-chtc:latest
-universe = container
+USERNAME = <your_username>
+SICOPOLIS_FILE = sicopolis.zip 
+MAX_RUN_TIME = <desired_maximum_runtime>
+ANF_PATH_INIT = <start_simulation_file> (optional)
+CORE_NB = <number_of_cpu_core>
+RAM = <maximum_ram_used>
+DISK = <maximum_disk_space_used>
 ```
 
 **Checkpoint/Restart Support**:
-```
-checkpoint_exit_code = 85
-transfer_checkpoint_files = snapshot
-+is_resumable = true
-```
-
 When `exec.sh` exits with code 85 (timeout), HTCondor preserves the `snapshot/` directory and automatically restarts the job, enabling long simulations to run across multiple time-limited sessions.
 
 **Input/Output Transfer**:
 - Pulls `sicopolis.zip` from staging area
 - Returns compressed output as `output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz`
-- Staging area path: `file:///staging/USERNAME/`
-
-**Resource Requests**:
-- CPUs: Configurable via `CORE_NB` (default: 1)
-- Memory: 1GB
-- Disk: 10GB
+- Staging area path: `file:///staging/<your_username>/`
 
 ### Execution Script with Checkpointing (exec.sh)
 
@@ -130,19 +122,13 @@ exec.sh <SIMULATION_NAME> <OUTPUT_NAME> <SICOPOLIS_FILE> [MAX_RUN_TIME] [CORE_NB
 - Exit code 0: Normal completion, final output archived
 - Other codes: Error, snapshot preserved for debugging
 
-**Key Functions**:
-- `getLastSnapshotId()`: Finds restart file from second-to-last 3D output
-- `getNcTime()`: Extracts time value from NetCDF file
-- `setHeader()`: Updates C preprocessor defines in SICOPOLIS header
-- `getLastDir()`: Identifies highest numbered snapshot directory
-
 ### Output Concatenation (sicoCheckpoints)
 
 Python utility to concatenate outputs from multiple snapshot runs into continuous time series.
 
 #### Usage
 ```bash
-./sicoCheckpoints <snapshot_directory>
+./sicoCheckpoints <output_path>
 ```
 
 #### Process
@@ -168,16 +154,24 @@ Python utility to concatenate outputs from multiple snapshot runs into continuou
 ### 1. Prepare Input
 ```bash
 # Ensure sicopolis.zip exists in staging area
-# /staging/USERNAME/sicopolis.zip
+# /staging/<your_username>/sicopolis.zip
 ```
 
 ### 2. Configure Simulation
 Edit `sico.sub`:
 ```
+USERNAME = bob
+SICOPOLIS_FILE = sicopolis.zip 
+MAX_RUN_TIME = 6h
+ANF_PATH_INIT = sico_in/grl
+CORE_NB =1
+RAM = 1GB
+DISK = 10GB
+
+...
+
 SIMULATION_NAME = grl04_bm5_spinup02_holo_...  # Must match header file name
-MAX_RUN_TIME = 6h                               # Adjust based on queue limits
-CORE_NB = 1                                     # CPU cores per job
-ANF_PATH_INIT = sico_in/grl                    # Optional: initial restart path
+queue 1
 ```
 
 ### 3. Submit Job
@@ -194,10 +188,12 @@ condor_tail -f <job_id>   # Follow output log
 ### 5. Retrieve and Process Results
 ```bash
 # Download outputs from staging area: output_<cluster>_<process>_<simulation>.tar.gz
-scp USERNAME@CHTC:/staging/USERNAME/output_<cluster>_<process>_<simulation>.tar.gz .
+scp <your_username>@CHTC:/staging/<your_username>/output_<cluster>_<process>_<simulation>.tar.gz output.tar.gz
+
 
 # Extract output archive:
-tar -I "pigz -d -p 4" -xvf output_<cluster>_<process>_<simulation>.tar.gz -C output
+mkdir output
+tar -I "pigz -d -p 4" -xvf output.tar.gz -C output
 
 # Extract and concatenate time series
 ./sicoCheckpoints output
@@ -213,16 +209,16 @@ tar -I "pigz -d -p 4" -xvf output_<cluster>_<process>_<simulation>.tar.gz -C out
 
 - **Timeout Handling**: Exit code 85 is intercepted by HTCondor as checkpoint signal, not job failure
 
-- **Parallel Compression**: Uses `pigz` for multi-threaded compression in output archive creation
-
 ## Contact
 
-**Nicolas B. Sartore**
-Research Assistant, [Till Wagner Group](tillwagner.me)
-Department of Atmospheric and Oceanic Sciences, University of Wisconsin-Madison, USA
+**Nicolas B. Sartore**\
+Research Assistant\
+[Till Wagner Group](https://tillwagner.me)\
+Department of Atmospheric and Oceanic Sciences\
+University of Wisconsin-Madison, USA
 
-- Website: [nsartore.me](nsartore.me)
+- Website: [nsartore.me](https://nsartore.me)
 - Email: [nsartore@wisc.edu](mailto:nsartore@wisc.edu)
-- GitHub: [github.com/nicsar2](github.com/nicsar2)
+- GitHub: [github.com/nicsar2](https://github.com/nicsar2)
 
 For questions about this repository, feel free to open an issue or reach out by email.

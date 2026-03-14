@@ -209,6 +209,11 @@ tar -I "pigz -d -p 4" -xvf output.tar.gz -C output
 
 - **Timeout Handling**: Exit code 85 is intercepted by HTCondor as checkpoint signal, not job failure
 
+- **SICOPOLIS Headers**: Checkpointing requires careful configuration of the following SICOPOLIS header parameters:
+  - `OUTPUT` must be set to `3`
+  - `DTIME_OUT0` must evenly divide `TIME_OUT0`
+  - `TIME_OUT0` must be small enough to allow at least 2 output files to be written within one `MAX_RUN_TIME` (from the job submission file)
+  
 ## Contact
 
 **Nicolas B. Sartore**\

@@ -24,34 +24,32 @@ Contains only the runtime environment and dependencies required to run SICOPOLIS
 - NetCDF libraries (libnetcdf-dev, netcdf-bin, libnetcdff-dev)
 - LIS library (v2.1.8) for solving linear systems
 
-**Usage**: Designed for CHTC where SICOPOLIS code is transferred separately as `sicopolis.zip` or uncompressed.
+**Usage**: Designed for CHTC where SICOPOLIS code is transferred separately as `sicopolis.zip`.
 
 ### Docker/Standalone
-Includes the full SICOPOLIS environment with code automatically cloned from GitHub:
+Includes everything to run SICOPOLIS:
 - All dependencies from Environment image
-- SICOPOLIS code cloned from official repository
-- Input files downloaded via `get_input_files.sh`
-
-**Usage**: Ideal for local testing and development.
+- SICOPOLIS code from official repository
+- Default input files 
 
 ### Building Docker Images
 
 ```bash
-# Build environment image (CHTC production)
+# Build environment image
 cd Docker/Environment
 docker build -t sicopolis-env:latest .
 
-# Build standalone image (local testing)
+# Build standalone image
 cd Docker/Standalone
 docker build -t sicopolis-standalone:latest .
 ```
 
 ### Downloading images from Repository
 ```bash
-# CHTC version:
+# Pull environment image
 docker pull nsartore/sicopolis-chtc:latest
 
-# Standalone version:
+# Pull Standalone image:
 docker pull nsartore/sicopolis-standalone:latest
 ```
 
@@ -101,7 +99,6 @@ exec.sh <SIMULATION_NAME> <OUTPUT_NAME> <SICOPOLIS_FILE> [MAX_RUN_TIME] [CORE_NB
 1. Extracts and configures SICOPOLIS
 2. Runs simulation with optional initial restart file (`-a` flag)
 3. On timeout (exit code 85), moves output to `snapshot/00000/`
-4. HTCondor preserves snapshot directory and restarts job
 
 **Subsequent Runs** (snapshots exist):
 1. Identifies last completed snapshot: `snapshot/XXXXX/`
@@ -115,12 +112,7 @@ exec.sh <SIMULATION_NAME> <OUTPUT_NAME> <SICOPOLIS_FILE> [MAX_RUN_TIME] [CORE_NB
    #define ANF_DAT 3
    ```
 5. Runs SICOPOLIS with restart configuration
-6. On timeout, increments snapshot number and repeats
-
-**Exit Behavior**:
-- Exit code 85: Timeout, checkpoint created for restart
-- Exit code 0: Normal completion, final output archived
-- Other codes: Error, snapshot preserved for debugging
+6. On timeout, move output files to incremented `snapshot/XXXXX/`
 
 ### Output Concatenation (sicoCheckpoints)
 
@@ -140,8 +132,6 @@ Python utility to concatenate outputs from multiple snapshot runs into continuou
 4. **Slice 1D data**: Extracts time series up to checkpoint time from `*_ser.nc`
 5. **Slice 2D data**: Selects all 2D files (`*_2d_*.nc`) with time ≤ checkpoint
 6. **Concatenate**: Uses NCO tools to merge sliced outputs
-   - `ncecat`: Combines 2D files along time dimension
-   - `ncrcat`: Concatenates 1D time series
 7. **Cleanup**: Removes intermediate files, keeps final `${SIMULATION_NAME}_1D.nc` and `${SIMULATION_NAME}_2D.nc`
 
 **Dependencies**:
@@ -196,7 +186,7 @@ mkdir output
 tar -I "pigz -d -p 4" -xvf output.tar.gz -C output
 
 # Extract and concatenate time series
-./sicoCheckpoints output
+python3 sicoCheckpoints.py output
 ```
 
 ## Configuration Notes
@@ -217,11 +207,11 @@ tar -I "pigz -d -p 4" -xvf output.tar.gz -C output
 ## Contact
 
 **Nicolas B. Sartore**\
-Research Assistant\
-[Till Wagner Group](https://tillwagner.me)\
-Department of Atmospheric and Oceanic Sciences\
+Research Assistant in [Till Wagner](https://tillwagner.me) Group,\
+Department of Atmospheric and Oceanic Sciences,\
 University of Wisconsin-Madison, USA
 
+Useful links:
 - Website: [nsartore.me](https://nsartore.me)
 - Email: [nsartore@wisc.edu](mailto:nsartore@wisc.edu)
 - GitHub: [github.com/nicsar2](https://github.com/nicsar2)

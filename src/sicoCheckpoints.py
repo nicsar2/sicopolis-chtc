@@ -120,16 +120,11 @@ def sico_snap_concat(path):
 			selected_files = selected_files[1:]
 		sb.run(["ncecat", "-u", "time", "-O", *selected_files, "-o", str(path/(snapshotId+"_2D.nc"))], check=True)
 
-	files = path.glob("[0-9][0-9][0-9][0-9][0-9]_1D.nc")
-	sb.run(["ncrcat", *files, str(path / f"{simName}_1D.nc")], check=True)
-
-	files = path.glob("[0-9][0-9][0-9][0-9][0-9]_2D.nc")
-	sb.run(["ncrcat", *files, str(path / f"{simName}_2D.nc")], check=True)
-	
-	files = path.glob("[0-9][0-9][0-9][0-9][0-9]_[1-2]D.nc")
-	for file in files:
-		print(file)
-		file.unlink()
+	for dim in ["1D", "2D"]:
+		files = sorted(path.glob(f"[0-9][0-9][0-9][0-9][0-9]_{dim}.nc"))
+		sb.run(["ncrcat", *(str(f) for f in files), str(path / f"{simName}_{dim}.nc")], check=True )
+		for file in files:
+			file.unlink()
 
 if __name__ == '__main__':
 	sico_snap_concat(sys.argv[1])

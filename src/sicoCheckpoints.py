@@ -1,104 +1,135 @@
 #!/usr/bin/env python3
 
-import os
 import sys
-import shutil
-import glob
-from pathlib import Path
-import numpy as np
-from netCDF4 import Dataset
-import subprocess as sp
+import pathlib as pl
+import subprocess as sb
 import xarray as xr
 
-def sico_snap_concat(snap_path):
+def get2DList(path):
+	if not isinstance(path, pl.Path):
+		raise ValueError("Path wrong type")
+	files = sorted(path.glob(f"{simName}_2d_[0-9][0-9][0-9][0-9].nc"))
+	return files
 
-	if snap_path is None:
-		raise ValueError("Error: expected 1 argument, got 0.")
+def get3DList(path):
+	if not isinstance(path, pl.Path):
+		raise ValueError("Path wrong type")
 
-	home_path = Path.cwd()
-	if not home_path.exists():
-		raise RuntimeError("Failed to get current directory")
+	files = sorted(path.glob(f"{simName}[0-9][0-9][0-9][0-9].nc"))
+	return files
 
-	snap_path = Path(snap_path).resolve()
-	if not snap_path.is_dir():
-		raise RuntimeError("Snapshot directory missing")
+def verify_file_structure(path: pl.Path):
+	if not isinstance(path, pl.Path):
+		raise ValueError("Path wrong type")
 
-	for pattern in ("*1D*", "*2D*", "*3D*"):
-		for p in snap_path.glob(pattern):
-			if p.is_dir():
-				shutil.rmtree(p)
-			else:
-				p.unlink(missing_ok=True)
+	is1Dok = True
+	is2Dok = True
+	global simName
+	simName = path.stem
 
-	subdirs = sorted([d for d in snap_path.iterdir() if d.is_dir()])
-	for i, subdir in enumerate(subdirs):
-		print(subdir)
+	if not path.is_dir():
+		raise ValueError(f"Main data path does not exist: {path}")
 
-		if not subdir.is_dir():
-			raise RuntimeError(f"Error: snapshot subdirectory {subdir} does not exist!" )
+	snapshots = sorted([d for d in path.iterdir() if d.is_dir()])
+	if not snapshots:
+		raise ValueError(f"No snapshot subfolder in {path}")
 
-		snapshotId = subdir.name
+	for snapshot in snapshots:
+		if not snapshot.is_dir():
+			raise ValueError(f"No data in snapshot subfolder in {snapshot}")
 
-		os.chdir(subdir)
+		if not (snapshot/(simName + "_ser.nc")).is_file():
+			is1Dok = False
+			print(f"No 1D data in snapshot subfolder in {snapshot}, 1D will not be concatenated.")
 
-		for pattern in ("*.site", "*_site.nc"):
-			for fname in glob.glob(pattern):
-				os.remove(fname)
+		file_2d = get2DList(snapshot)
+		if not file_2d:
+			is2Dok = False
+			print(f"No 2D data in snapshot subfolder in {snapshot}, 2D will not be concatenated.")
 
-		files_1d = glob.glob("*_ser.nc")
+		file_3d = get3DList(snapshot)
+		if len(file_3d) < 2:
+			raise ValueError(f"Error with 3D files, need at least 2 per snapshot")
 
-		if len(files_1d) == 1:
-			simName = files_1d[0].removesuffix("_ser.nc")
-		else:
-			os.chdir(home_path)
-			raise RuntimeError(f"Expected exactly one *_ser.nc file, found {len(files_1d)}" )
+	return is1Dok, is2Dok
 
-		if not Path(f"{simName}0001.nc").is_file():
-			os.chdir(home_path)
-			raise RuntimeError(f"No 3D files in snapshot subdirectory {subdir}" )
+def removeOldFiles(path):
+	if not isinstance(path, pl.Path):
+		raise ValueError("Path wrong type")
 
-		if i == len(subdirs) - 1:
+	for pattern in ("*1D.nc*", "*2D.nc*", "*3D.nc*"):
+		for file in path.glob(pattern):
+			if file.is_file():
+				file.unlink()
+
+def removeUnusedFiles(path):
+	if not isinstance(path, pl.Path):
+		raise ValueError("Path wrong type")
+
+	for pattern in ("*.site", "*_site.nc"):
+		for file in path.glob(pattern):
+			if file.is_file():
+				file.unlink()
+
+def sico_snap_concat(path):
+	if isinstance(path, str):
+		path = pl.Path(path)
+
+	if not isinstance(path, pl.Path):
+		raise ValueError("Path wrong type")
+	path = path.resolve()
+
+	is1Dok, is2Dok = verify_file_structure(path)
+
+	removeOldFiles(path)
+
+	snapshots = sorted([d for d in path.iterdir() if d.is_dir()])
+	for i, snapshot in enumerate(snapshots):
+		print(snapshot)
+
+		if not snapshot.is_dir():
+			raise RuntimeError(f"Error: snapshot directory {snapshot} does not exist!" )
+
+		removeUnusedFiles(snapshot)
+		snapshotId = snapshot.name
+
+		if i == len(snapshots) - 1:
 			time = 1e99
 		else:
-			files_3D = sorted(glob.glob(f"{simName}0*.nc"))
-			if len(files_3D) < 2:
-				raise RuntimeError("Not enough NetCDF 3D files found")
+			files3D = get3DList(snapshot)
+			with xr.open_dataset(snapshot/files3D[-2]) as ds:
+				time = float(ds.variables["time"])
 
-			with Dataset(files_3D[-2], "r") as ds:
-				time = ds.variables["time"][:]
+		file1D = snapshot/(simName + "_ser.nc")
+		with xr.open_dataset(file1D) as ds:
+			ds = ds.sel(t=slice(None, time))
+			if i!=0:
+				ds = ds.isel(t=slice(1, None))
+			ds.to_netcdf(path / f"{snapshotId}_1D.nc")
 
-		infile = f"{simName}_ser.nc"
-		outfile = Path("..") / f"{snapshotId}_1D.nc"
-		ds = xr.open_dataset(infile)
-		ds_sliced = ds.sel(t=slice(None, time))
-		ds_sliced.to_netcdf(outfile)
-		ds.close()
-		ds_sliced.close()
-
-		files_2d = sorted(glob.glob("*_2d_*.nc"))
+		files2D = get2DList(snapshot)
 		selected_files = []
-		for f in files_2d:
-			with xr.open_dataset(f) as ds:
+		for file in files2D:
+			with xr.open_dataset(file) as ds:
 				file_tmax = float(ds.time)
 			if file_tmax <= time:
-				selected_files.append(f)
+				selected_files.append(file)
 			else:
 				break
-		sp.run(["ncecat", "-u", "time", "-O", *selected_files, "-o", f"../{snapshotId}_2D.nc"], check=True)
+		if i!=0:
+			selected_files = selected_files[1:]
+		sb.run(["ncecat", "-u", "time", "-O", *selected_files, "-o", str(path/(snapshotId+"_2D.nc"))], check=True)
 
-	os.chdir(snap_path)
+	files = path.glob("[0-9][0-9][0-9][0-9][0-9]_1D.nc")
+	sb.run(["ncrcat", *files, str(path / f"{simName}_1D.nc")], check=True)
 
-	files = sorted(glob.glob("*_1D.nc"))
-	sp.run(["ncrcat", *files, f"{simName}_1D.nc"], check=True)
-	for f in files:
-		os.remove(f)
-
-	files = sorted(glob.glob("*_2D.nc"))
-	sp.run(["ncrcat", *files, f"{simName}_2D.nc"], check=True)
-	for f in files:
-		os.remove(f)
-
-	os.chdir(home_path)
+	files = path.glob("[0-9][0-9][0-9][0-9][0-9]_2D.nc")
+	sb.run(["ncrcat", *files, str(path / f"{simName}_2D.nc")], check=True)
+	
+	files = path.glob("[0-9][0-9][0-9][0-9][0-9]_[1-2]D.nc")
+	for file in files:
+		print(file)
+		file.unlink()
 
 if __name__ == '__main__':
 	sico_snap_concat(sys.argv[1])

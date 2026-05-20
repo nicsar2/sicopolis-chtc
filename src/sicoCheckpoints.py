@@ -4,6 +4,7 @@ import sys
 import pathlib as pl
 import subprocess as sb
 import xarray as xr
+import argparse as ap
 
 def get2DList(path):
 	if not isinstance(path, pl.Path):
@@ -35,12 +36,13 @@ def getSimulationName(path):
 		print(f"Multiple .h files in snapshot {snapshot.stem}, can not extract simulation name.")
 		simName = input("Please input it manually here: ")
 
-def verify_file_structure(path: pl.Path):
+def verify_file_structure(path: pl.Path, extract2dFrom3d: bool):
 	if not isinstance(path, pl.Path):
 		raise ValueError("Path wrong type")
 
 	is1Dok = True
 	is2Dok = True
+	is2Dfrom3D = False
 
 	if not path.is_dir():
 		raise ValueError(f"Main data path does not exist: {path}")
@@ -68,8 +70,16 @@ def verify_file_structure(path: pl.Path):
 		file_3d = get3DList(snapshot)
 		if len(file_3d)<2 and len(snapshots)>1:
 			raise ValueError(f"Error with 3D files, need at least 2 per snapshot")
+		
+		if len(file_3d)>2 and extract2dFrom3d:
+			if not is2Dok:
+				is2Dfrom3D = True
+				print(f"2D will be extracted from 3D files.")
+			else:
+				print(f"Extract 2D from 3D is true, but 2D are present. They will be used instead.")
 
-	return is1Dok, is2Dok
+
+	return is1Dok, is2Dok, is2Dfrom3D
 
 def removeOldFiles(path):
 	if not isinstance(path, pl.Path):
@@ -89,7 +99,7 @@ def removeUnusedFiles(path):
 			if file.is_file():
 				file.unlink()
 
-def sico_snap_concat(path):
+def sico_snap_concat(path, extract2dFrom3d):
 	if isinstance(path, str):
 		path = pl.Path(path)
 
@@ -97,7 +107,7 @@ def sico_snap_concat(path):
 		raise ValueError("Path wrong type")
 	path = path.resolve()
 
-	is1Dok, is2Dok = verify_file_structure(path)
+	is1Dok, is2Dok, is2Dfrom3D = verify_file_structure(path, extract2dFrom3d)
 
 	removeOldFiles(path)
 
@@ -111,10 +121,10 @@ def sico_snap_concat(path):
 		removeUnusedFiles(snapshot)
 		snapshotId = snapshot.name
 
+		files3D = get3DList(snapshot)
 		if i == len(snapshots) - 1:
 			time = 1e99
 		else:
-			files3D = get3DList(snapshot)
 			with xr.open_dataset(snapshot/files3D[-2]) as ds:
 				time = float(ds.variables["time"])
 
@@ -138,13 +148,52 @@ def sico_snap_concat(path):
 					break
 			if i!=0:
 				selected_files = selected_files[1:]
-			sb.run(["ncecat", "-u", "time", "-O", *selected_files, "-o", str(path/(snapshotId+"_2D.nc"))], check=True)
+			sb.run([
+					"ncecat",
+					"-u",
+					"time",
+					"-O",
+					*selected_files,
+					"-o",
+					str(path/(snapshotId+"_2D.nc"))
+				], check=True
+			)
 
+		if is2Dfrom3D:
+			selected_files = []
+			for file in files3D:
+				with xr.open_dataset(file) as ds:
+					file_tmax = float(ds.time)
+				if file_tmax <= time:
+					selected_files.append(file)
+				else:
+					break
+			if i != 0:
+				selected_files = selected_files[1:]
+
+			with xr.open_dataset(selected_files[0]) as ds:
+				vars_2d = []
+				for var in ds.data_vars:
+					dims = ds[var].dims
+					print(dims)
+					if len(dims)<=2:
+						vars_2d.append(var)
+				vars_string = ",".join(vars_2d)
+
+			sb.run([
+					"ncecat",
+					"-u", "time",
+					"-v", vars_string,
+					"-O",
+					*selected_files,
+					"-o", str(path / (snapshotId + "_2D.nc"))
+				], check=True
+			)
 
 	toConcatenate = []
 	if is1Dok:
 		toConcatenate.append("1D")
-	if is2Dok:
+	if is2Dok or is2Dfrom3D:
 		toConcatenate.append("2D")
 
 	for dim in toConcatenate:
@@ -153,5 +202,32 @@ def sico_snap_concat(path):
 		for file in files:
 			file.unlink()
 
+
+def main():
+
+	pars = ap.ArgumentParser(
+		description='SICOPOLIS output concatening script.'
+	)
+
+	pars.add_argument(
+		'path',
+		help='Path to the directory containing the snapshots.'
+	)
+
+	pars.add_argument(
+		'-e', '--extract2dFrom3d',
+		action='store_true',
+		default=False,
+		help='If 2d files are not present and 3d are, will extract the 2d data from the 3d files.'
+	)
+
+	args = pars.parse_args()
+
+	sico_snap_concat(
+		path=args.path,
+		extract2dFrom3d=args.extract2dFrom3d
+	)
+
+
 if __name__ == '__main__':
-	sico_snap_concat(sys.argv[1])
+	main()

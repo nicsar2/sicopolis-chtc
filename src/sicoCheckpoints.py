@@ -175,7 +175,6 @@ def sico_snap_concat(path, extract2dFrom3d):
 				vars_2d = []
 				for var in ds.data_vars:
 					dims = ds[var].dims
-					print(dims)
 					if len(dims)<=2:
 						vars_2d.append(var)
 				vars_string = ",".join(vars_2d)
@@ -202,7 +201,6 @@ def sico_snap_concat(path, extract2dFrom3d):
 		for file in files:
 			file.unlink()
 
-
 def main():
 
 	pars = ap.ArgumentParser(
@@ -227,7 +225,6 @@ def main():
 		path=args.path,
 		extract2dFrom3d=args.extract2dFrom3d
 	)
-
 
 if __name__ == '__main__':
 	main()

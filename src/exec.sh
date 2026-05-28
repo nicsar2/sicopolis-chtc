@@ -144,20 +144,26 @@ cleanup() {
 }
 
 createOutputFile() {
+	tar --remove-files -I "pigz -p ${CORE_NB}" -cf "output_${OUTPUT_NAME:?}_${SIMULATION_NAME:?}.tar.gz" -C snapshot .
+}
+
+removeVariable() {
 	local FILE
 	local FILES
 
-	echo 1
 	if [[ -n "${VAR_TO_KEEP}" ]]; then
 		mapfile -t FILES < <(find "snapshot" -maxdepth 2 -type f -name "${SIMULATION_NAME:?}[0-9][0-9][0-9][0-9].nc" )
 		for FILE in "${FILES[@]}"; do
-			echo "$FILE"
-			ncks -v ${VAR_TO_KEEP:?} "${FILE:?}" "${FILE:?}.tmp"
+			ncks -v "${VAR_TO_KEEP:?},lat,lon,time" "${FILE:?}" "${FILE:?}.tmp"
+			mv "${FILE:?}.tmp" "${FILE:?}"
+		done
+
+		mapfile -t FILES < <(find "snapshot" -maxdepth 2 -type f -name "${SIMULATION_NAME:?}_2d_[0-9][0-9][0-9][0-9].nc" )
+		for FILE in "${FILES[@]}"; do
+			ncks -v "${VAR_TO_KEEP:?},lat,lon,time" "${FILE:?}" "${FILE:?}.tmp"
 			mv "${FILE:?}.tmp" "${FILE:?}"
 		done
 	fi
-	echo 1
-	tar --remove-files -I "pigz -p ${CORE_NB}" -cf "output_${OUTPUT_NAME:?}_${SIMULATION_NAME:?}.tar.gz" -C snapshot .
 }
 
 readonly SIMULATION_NAME="$1"
@@ -174,6 +180,11 @@ readonly MAX_RUN_TIME="${4:-1d}"
 readonly CORE_NB="${5:-1}"
 readonly ANF_PATH_INIT="${6:-}"
 readonly VAR_TO_KEEP="${7:-}"
+
+if [[ ! "${VAR_TO_KEEP:-}" =~ ^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$ ]]; then
+    echo "Error: VAR_TO_KEEP must be a comma-separated list of variable names"
+    exit 1
+fi
 
 readonly homePath="$(pwd)"
 : "${homePath:?Failed to get current directory}"
@@ -241,11 +252,13 @@ else
 fi
 
 cd "${homePath:?}"
+removeVariable
 mv "${simPath:?}" "snapshot/${lastSnapshotNbNext:?}"
 
 if [ "${timeout_exit_status:?}" -eq 124 ]; then
 	exit 85
 else
+	removeVariable
 	createOutputFile
 	exit "${timeout_exit_status:?}"
 fi

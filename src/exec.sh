@@ -144,6 +144,19 @@ cleanup() {
 }
 
 createOutputFile() {
+	local FILE
+	local FILES
+
+	echo 1
+	if [[ -n "${VAR_TO_KEEP}" ]]; then
+		mapfile -t FILES < <(find "snapshot" -maxdepth 2 -type f -name "${SIMULATION_NAME:?}[0-9][0-9][0-9][0-9].nc" )
+		for FILE in "${FILES[@]}"; do
+			echo "$FILE"
+			ncks -v ${VAR_TO_KEEP:?} "${FILE:?}" "${FILE:?}.tmp"
+			mv "${FILE:?}.tmp" "${FILE:?}"
+		done
+	fi
+	echo 1
 	tar --remove-files -I "pigz -p ${CORE_NB}" -cf "output_${OUTPUT_NAME:?}_${SIMULATION_NAME:?}.tar.gz" -C snapshot .
 }
 
@@ -151,7 +164,7 @@ readonly SIMULATION_NAME="$1"
 : "${SIMULATION_NAME:?No simulation name}"
 
 readonly OUTPUT_NAME="$2"
-: "${SIMULATION_NAME:?No simulation name}"
+: "${OUTPUT_NAME:?No output name}"
 
 readonly SICOPOLIS_FILE="$3"
 : "${SICOPOLIS_FILE:?No name for Sicopolis compressed folder}"
@@ -160,6 +173,7 @@ readonly sicoDirName="${SICOPOLIS_FILE%.*}"
 readonly MAX_RUN_TIME="${4:-1d}"
 readonly CORE_NB="${5:-1}"
 readonly ANF_PATH_INIT="${6:-}"
+readonly VAR_TO_KEEP="${7:-}"
 
 readonly homePath="$(pwd)"
 : "${homePath:?Failed to get current directory}"

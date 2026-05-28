@@ -13,6 +13,7 @@ RUN apt-get update && \
 		libnetcdf-dev=1:4.8.1-1 \
 		netcdf-bin=1:4.8.1-1 \
 		libnetcdff-dev=4.5.4+ds-1 \
+		nco \
 		unzip \
 		tar \
 		pigz \
@@ -33,7 +34,7 @@ RUN cd /tmp && \
 	    CFLAGS="-mcmodel=medium" CPPFLAGS="-mcmodel=medium" \
 	    FCFLAGS="-mcmodel=medium" FFLAGS="-mcmodel=medium" &&\
 	make && \
-	make check &&\
+	make check && \
 	make install && \
 	cd .. && \
 	rm -r lis-$LIS_VERSION

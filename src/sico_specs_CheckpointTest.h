@@ -178,11 +178,11 @@
 #define TIME_END0 1.0d6
 !                       Final time of simulation (in a)
 
-#define DTIME0 20.0d0
+#define DTIME0 25.0d0
 !                       Time step (in a) for computation of velocity
 !                       and topography
 
-#define DTIME_TEMP0 20.0d0
+#define DTIME_TEMP0 25.0d0
 !                       Time step (in a) for computation of
 !                       temperature, water content and age of the ice
 
@@ -990,7 +990,7 @@
 !                              time-slice output with all 3-d fields for
 !                              OUTPUT==3, in which case snapshots are written)
 
-#define DTIME_SER0 20.0d0
+#define DTIME_SER0 100.0d0
 !                         Time step (in a) for writing of data to
 !                         the time-series files (scalar variables)
 

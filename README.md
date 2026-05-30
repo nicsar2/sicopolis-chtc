@@ -207,7 +207,7 @@ After copying the sicopolis source code in the working directory and the `sico_s
 ```
 
 ```bash
-docker run --user $(id -u):$(id -g) -v $(pwd):/sico -w /sico nsartore/sicopolis-chtc:latest ./exec.sh CheckpointTest prefix sicopolis.zip 9m 1
+docker run --user $(id -u):$(id -g) -v $(pwd):/sico -w /sico nsartore/sicopolis-chtc:latest ./exec.sh CheckpointTest prefix sicopolis.zip 4m 1
 ```
 
 Depending on the computational speed of the host machine, one of two outcomes is expected:

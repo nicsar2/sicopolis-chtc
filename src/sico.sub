@@ -1,10 +1,11 @@
-USERNAME = nsartore
+STORAGE_PATH = file:///<PATH>
 SICOPOLIS_FILE = sicopolis.zip 
-MAX_RUN_TIME = 6h
-ANF_PATH_INIT = 
+MAX_RUN_TIME = 5m
+ANF_PATH_INIT = sico_in/grl
 CORE_NB = 1
-RAM = 1GB
-DISK = 10GB
+RAM = 5GB
+DISK = 20GB
+#VAR_TO_KEEP = lon,lat,mask,H,zb,calving,calving_apl,calving_fdc,calving_horizontal,cell_area
 
 DOCKER_NAME = nsartore/sicopolis-chtc
 DOCKER_TAG = latest
@@ -12,11 +13,11 @@ DOCKER_TAG = latest
 container_image = docker://$(DOCKER_NAME):$(DOCKER_TAG)
 universe = container
 executable = exec.sh
-arguments = $(SIMULATION_NAME) $(Cluster)_$(Process) $(SICOPOLIS_FILE) $(MAX_RUN_TIME) $(CORE_NB) $(ANF_PATH_INIT)
+arguments = $(SIMULATION_NAME) $(Cluster)_$(Process) $(SICOPOLIS_FILE) $(MAX_RUN_TIME) $(CORE_NB) $(ANF_PATH_INIT) $(VAR_TO_KEEP)
 
-transfer_input_files = file:///staging/$(USERNAME)/$(SICOPOLIS_FILE) 
+transfer_input_files = $(STORAGE_PATH)/$(SICOPOLIS_FILE) 
 transfer_output_files = output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz
-transfer_output_remaps = "output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz = file:///staging/$(USERNAME)/output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz"
+transfer_output_remaps = "output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz = $(STORAGE_PATH)/output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz"
 Requirements = (Target.HasCHTCStaging == true)
 
 checkpoint_exit_code        = 85
@@ -34,8 +35,8 @@ request_memory = $(RAM)
 request_disk = $(DISK)
 
 # To run multiple simulations uncomment the line below and replace <SIMULATION_LIST_FILE>
-queue SIMULATION_NAME from <SIMULATION_LIST_FILE>
+#queue SIMULATION_NAME from <SIMULATION_LIST_FILE>
 
 # To run a single simulation uncomment the two lines below and replace <SIMULATION_NAME>
-#SIMULATION_NAME = <SIMULATION_NAME>
-#queue 1
+SIMULATION_NAME = CheckpointTest
+queue 1

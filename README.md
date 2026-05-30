@@ -37,10 +37,10 @@ cd sicopolis
 Contains only the runtime environment and dependencies required to run SICOPOLIS:
 - Ubuntu 22.04 base
 - Fortran compiler (gfortran)
-- NetCDF libraries (libnetcdf-dev, netcdf-bin, libnetcdff-dev)
+- NetCDF libraries (libnetcdf-dev, netcdf-bin, libnetcdff-dev, nco)
 - LIS library (v2.1.8) for solving linear systems
 
-**Usage**: Designed for CHTC deployments where the SICOPOLIS source code is transferred separately as `sicopolis.zip`.
+**Usage**: Designed for CHTC deployments where the SICOPOLIS source code is transferred separately.
 
 ### Building
 ```bash
@@ -61,7 +61,7 @@ The checkpointing workflow is orchestrated by a single Bash script: `exec.sh`, w
 
 ### Command Line Usage
 ```bash
-exec.sh <SIMULATION_NAME> <OUTPUT_NAME> <SICOPOLIS_FILE> [MAX_RUN_TIME] [CORE_NB] [ANF_PATH_INIT]
+exec.sh <SIMULATION_NAME> <OUTPUT_NAME> <SICOPOLIS_FILE> [MAX_RUN_TIME] [CORE_NB] [ANF_PATH_INIT] [VAR_TO_KEEP]
 ```
 
 - `SIMULATION_NAME`: Name of the simulation configuration (must match the header file name)
@@ -70,6 +70,7 @@ exec.sh <SIMULATION_NAME> <OUTPUT_NAME> <SICOPOLIS_FILE> [MAX_RUN_TIME] [CORE_NB
 - `MAX_RUN_TIME`: Maximum runtime before timeout (default: `1d`)
 - `CORE_NB`: Number of CPU cores (default: `1`)
 - `ANF_PATH_INIT`: Optional path to the initial NetCDF restart file. Used only on the first execution of `exec.sh`.
+- `VAR_TO_KEEP`: Optional list of variables. When not empty, 2d and 3d files will be cleared of all variables except those listed here, helping save space and transfer time. Format should be: var1,var2,var3,...
 
 ### Snapshot/Restart Mechanism
 
@@ -80,8 +81,7 @@ exec.sh <SIMULATION_NAME> <OUTPUT_NAME> <SICOPOLIS_FILE> [MAX_RUN_TIME] [CORE_NB
 
 **Subsequent Runs** (snapshots exist):
 1. Identifies the last completed snapshot directory: `snapshot/XXXXX/`
-2. Selects the second-to-last 3D NetCDF file: `${SIMULATION_NAME}NNNN.nc`
-   - The last file may be incomplete; the second-to-last provides a safe restart point
+2. Selects the second-to-last 3D NetCDF file: `${SIMULATION_NAME}NNNN.nc`. The last file may be incomplete; the second-to-last provides a safe restart point
 3. Extracts the time value from the NetCDF file using `ncdump`
 4. Modifies the SICOPOLIS header file (`sico_specs_${SIMULATION_NAME}.h`):
    ```c
@@ -103,7 +103,7 @@ Each checkpoint run produces a individual snapshot directory. The Python utility
 
 ### Command Line Usage
 ```bash
-python3 sicoCheckpoints.py <output_path>
+python3 sicoCheckpoints.py [OPTION] <output_path>
 ```
 
 ### Concatenation Mechanism
@@ -117,15 +117,17 @@ python3 sicoCheckpoints.py <output_path>
 6. **Concatenate**: Uses NCO tools to merge the sliced outputs
 7. **Cleanup**: Removes intermediate files; retains the final `${SIMULATION_NAME}_1D.nc` and `${SIMULATION_NAME}_2D.nc`
 
+### Options
+ - `-e` or `--extract2dFrom3d`: if 2d output files are not present, will extract 2d files from 3d files.
 
 ## HTCondor Execution on CHTC
 
+### Jobs configuration
 The CHTC uses HTCondor as its workload management platform. Job submission requires a configuration file: `sico.sub`.
 
-**Container Configuration**:
 ```
-USERNAME = <your_username>
-SICOPOLIS_FILE = sicopolis.zip
+STORAGE_PATH = file:///<path_to_storage>
+SICOPOLIS_FILE = <name_of_sicopolis_archive>
 MAX_RUN_TIME = <desired_maximum_runtime>
 ANF_PATH_INIT = <initial_restart_file>   # optional
 CORE_NB = <number_of_cpu_cores>
@@ -133,34 +135,17 @@ RAM = <maximum_ram>
 DISK = <maximum_disk_space>
 ```
 
-**Checkpoint/Restart Support**:
-When `exec.sh` exits with code 85 (timeout), HTCondor preserves the `snapshot/` directory and automatically requeues the job, enabling long simulations to span multiple time-limited execution sessions.
-
-**Input/Output Transfer**:
-- Pulls `sicopolis.zip` from the staging area
-- Returns a compressed output archive as `output_$(Cluster)_$(Process)_$(SIMULATION_NAME).tar.gz`
-- Staging area path: `file:///staging/<your_username>/`
-
 ### Running Simulations on CHTC
 
 #### 1. Prepare Input
-Ensure `sicopolis.zip` is present in the staging area: `/staging/<your_username>/sicopolis.zip`
+Ensure `sicopolis.zip` is present in the storage area: `${STORAGE_PATH}/sicopolis.zip`
 
 #### 2. Configure Simulation
 Edit `sico.sub` to set the resource requirements and queue mode. Two queue modes are supported:
 
 **Single simulation** (uncomment the last two lines):
 ```
-USERNAME = bob
-SICOPOLIS_FILE = sicopolis.zip
-MAX_RUN_TIME = 6h
-ANF_PATH_INIT = sico_in/grl
-CORE_NB = 1
-RAM = 1GB
-DISK = 10GB
-
 ...
-
 # SIMULATION_NAME = grl04_bm5_spinup02_holo_...  # Must match a header file
 # queue 1
 ```
@@ -178,12 +163,9 @@ condor_submit sico.sub
 
 #### 4. Monitor Progress
 
-##### Check job status
 ```bash
 condor_q
 ```
-
-##### Follow output log
 ```bash
 condor_tail -f <job_id>
 ```
@@ -191,18 +173,12 @@ condor_tail -f <job_id>
 #### 5. Retrieve and Process Results
 Download the output archive from the staging area:
 ```bash
-scp <your_username>@CHTC:/staging/<your_username>/output_<cluster>_<process>_<simulation>.tar.gz output.tar.gz
+scp <your_username>@CHTC:${STORAGE_PATH}/output_<cluster>_<process>_<simulation>.tar.gz output.tar.gz
 ```
 
 Extract the output archive:
 ```bash
-mkdir output
-```
-```bash
-tar -xvf output.tar.gz -C output                    # Single-threaded decompression
-```
-```bash
-tar -I "pigz -d -p 4" -xvf output.tar.gz -C output  # Multi-threaded decompression
+mkdir output && tar -xvf output.tar.gz -C output                    # Single-threaded decompression
 ```
 
 Concatenate the time series:
@@ -243,10 +219,6 @@ Depending on the computational speed of the host machine, one of two outcomes is
 The snapshot directory contains numbered subdirectories (00000, 00001, 00002, etc.), one per checkpoint run. The total number of subdirectories will vary depending on the computational speed of the host machine. To concatenate all snapshots into a single output file, place `sicoCheckpoints.py` in the working directory. The expected file structure is:
 ```
 .
-├── snapshot/
-    ├── 00000/
-    ├── 00001/
-    └── ...
 ├── sicopolis_source_code/
     └── ...
 ├── exec.sh
@@ -254,15 +226,13 @@ The snapshot directory contains numbered subdirectories (00000, 00001, 00002, et
 └── sicoCheckpoints.py
 ```
 
-Extract the output archive and run the concatenation utility:
+Extract the output archive:
 ```bash
-mkdir snapshot
+mkdir output && tar -xvf prefix_output_CheckpointTest.tar.gz -C output
 ```
+And run the concatenation utility:
 ```bash
-tar -xvf prefix_output_CheckpointTest.tar.gz -C snapshot
-```
-```bash
-python3 sicoCheckpoints.py snapshot
+python3 sicoCheckpoints.py output
 ```
 
 The files `CheckpointTest_1D.nc` and `CheckpointTest_2D.nc` will be generated in the `snapshot/` directory, containing the complete concatenated time series. The final directory structure should be:
@@ -283,18 +253,16 @@ The files `CheckpointTest_1D.nc` and `CheckpointTest_2D.nc` will be generated in
 
 ## Configuration Notes
 
-- **Path Configuration**: `exec.sh` automatically updates `sico_configs.sh` to use the appropriate container paths:
-  - `NETCDFHOME=/usr`
-  - `LISHOME=/opt/lis`
+- **Path Configuration**: `exec.sh` automatically updates `sico_configs.sh` to use the appropriate container paths `NETCDFHOME=/usr` and `LISHOME=/opt/lis`. So there is no need to modify them before running simulations.
 
 - **Header Files**: The SICOPOLIS header file must exist at `headers/sico_specs_${SIMULATION_NAME}.h` within the source tree.
 
 - **Timeout Handling**: Exit code 85 is intercepted by HTCondor as a checkpoint signal, not a job failure.
 
-- **SICOPOLIS Header Requirements**: Proper checkpointing requires the following SICOPOLIS header parameters to be configured correctly:
-  - `OUTPUT` must be set to `3`
-  - `DTIME_OUT0` must evenly divide `TIME_OUT0`
-  - `TIME_OUT0` must be small enough to ensure that at least 2 output files are written within a single `MAX_RUN_TIME` window
+- **⚠️ ⚠️ ⚠️SICOPOLIS Header Requirements ⚠️ ⚠️ ⚠️**: Proper checkpointing requires the following SICOPOLIS header parameters to be configured correctly:
+  - `OUT_TIMES` must be set to `1`
+  - When saving 2D and 3D fields separately, the 2D output interval must evenly divide the 3D output interval. In other words, every 3D snapshot must coincide with a 2D snapshot.
+  - The 3D output interval must be configured such that at least two output files are written within every `MAX_RUN_TIME` window.
 
 ## Contact
 

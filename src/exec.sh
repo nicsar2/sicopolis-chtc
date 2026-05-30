@@ -154,14 +154,26 @@ removeVariable() {
 	if [[ -n "${VAR_TO_KEEP}" ]]; then
 		mapfile -t FILES < <(find "snapshot" -maxdepth 2 -type f -name "${SIMULATION_NAME:?}[0-9][0-9][0-9][0-9].nc" )
 		for FILE in "${FILES[@]}"; do
-			ncks -v "${VAR_TO_KEEP:?},lat,lon,time" "${FILE:?}" "${FILE:?}.tmp"
-			mv "${FILE:?}.tmp" "${FILE:?}"
+			if ncks -v "${VAR_TO_KEEP:?},lat,lon,time" \
+				"${FILE:?}" \
+				"${FILE:?}.tmp"; then
+
+				mv "${FILE:?}.tmp" "${FILE:?}"
+			else
+				rm -f "${FILE:?}.tmp"
+			fi
 		done
 
 		mapfile -t FILES < <(find "snapshot" -maxdepth 2 -type f -name "${SIMULATION_NAME:?}_2d_[0-9][0-9][0-9][0-9].nc" )
 		for FILE in "${FILES[@]}"; do
-			ncks -v "${VAR_TO_KEEP:?},lat,lon,time" "${FILE:?}" "${FILE:?}.tmp"
-			mv "${FILE:?}.tmp" "${FILE:?}"
+			if ncks -v "${VAR_TO_KEEP:?},lat,lon,time" \
+				"${FILE:?}" \
+				"${FILE:?}.tmp"; then
+
+				mv "${FILE:?}.tmp" "${FILE:?}"
+			else
+				rm -f "${FILE:?}.tmp"
+			fi
 		done
 	fi
 }
@@ -181,11 +193,10 @@ readonly CORE_NB="${5:-1}"
 readonly ANF_PATH_INIT="${6:-}"
 readonly VAR_TO_KEEP="${7:-}"
 
-if [[ ! "${VAR_TO_KEEP:-}" =~ ^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$ ]]; then
+if [[ -n $VAR_TO_KEEP && ! $VAR_TO_KEEP =~ ^[A-Za-z_][A-Za-z0-9_]*(,[A-Za-z_][A-Za-z0-9_]*)*$ ]]; then
     echo "Error: VAR_TO_KEEP must be a comma-separated list of variable names"
     exit 1
 fi
-
 readonly homePath="$(pwd)"
 : "${homePath:?Failed to get current directory}"
 
